@@ -32,16 +32,15 @@
 #
 # [Remember: No empty lines between comments and class definition]
 class ntp($servers="UNSET",
-          $ensure="running",
+          $ensure="UNSET",
           $autoupdate=false
 ) {
 
-  if ! ($ensure in [ "running", "stopped" ]) {
-    fail("ensure parameter must be running or stopped")
-  }
-
   if $autoupdate == true {
-    $package_ensure = latest
+    $package_ensure = $::operatingsystem ? {
+      'Solaris' => 'present', # autoupdate not possible on Solaris
+      default   => 'latest',
+    }
   } elsif $autoupdate == false {
     $package_ensure = present
   } else {
@@ -53,6 +52,10 @@ class ntp($servers="UNSET",
       $supported  = true
       $pkg_name   = [ "ntp" ]
       $svc_name   = "ntp"
+      $svc_ensure = $ensure ? {
+        'UNSET' => 'running',
+        default => $ensure,
+      }
       $config     = "/etc/ntp.conf"
       $config_tpl = "ntp.conf.debian.erb"
       if ($servers == "UNSET") {
@@ -68,12 +71,37 @@ class ntp($servers="UNSET",
       $supported  = true
       $pkg_name   = [ "ntp" ]
       $svc_name   = "ntpd"
+      $svc_ensure = $ensure ? {
+        'UNSET' => 'running',
+        default => $ensure,
+      }
       $config     = "/etc/ntp.conf"
       $config_tpl = "ntp.conf.el.erb"
       if ($servers == "UNSET") {
         $servers_real = [ "0.centos.pool.ntp.org",
                           "1.centos.pool.ntp.org",
                           "2.centos.pool.ntp.org", ]
+      } else {
+        $servers_real = $servers
+      }
+    }
+    solaris: {
+      $supported  = true
+      $pkg_name   = [ 'SUNWntpr', 'SUNWntpu' ]
+      $svc_name   = 'svc:/network/ntp:default'
+      $svc_ensure = $virtual ? {
+        'zone'  => 'stopped', # Solaris zones cannot run ntp
+        default => $ensure ? {
+          'UNSET' => 'running',
+          default => $ensure,
+        },
+      }
+      $config     = '/etc/inet/ntp.conf'
+      $config_tpl = 'ntp.conf.solaris.erb'
+      if ($servers == 'UNSET') {
+        $servers_real = [ '0.pool.ntp.org iburst',
+                          '1.pool.ntp.org iburst',
+                          '2.pool.ntp.org iburst', ]
       } else {
         $servers_real = $servers
       }
@@ -86,10 +114,21 @@ class ntp($servers="UNSET",
     }
   }
 
+  if ! ($svc_ensure in [ "running", "stopped" ]) {
+    fail("ensure parameter must be running or stopped")
+  }
+
   if ($supported == true) {
 
-    package { $pkg_name:
-      ensure => $package_ensure,
+    if $::operatingsystem == 'solaris' {
+      package { $pkg_name:
+        ensure   => $package_ensure,
+        provider => 'sun', # force the system package provider, not pkgutil
+      }
+    } else {
+      package { $pkg_name:
+        ensure => $package_ensure,
+      }
     }
 
     file { $config:
@@ -102,7 +141,7 @@ class ntp($servers="UNSET",
     }
 
     service { "ntp":
-      ensure     => $ensure,
+      ensure     => $svc_ensure,
       name       => $svc_name,
       hasstatus  => true,
       hasrestart => true,

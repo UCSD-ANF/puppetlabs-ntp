@@ -1,0 +1,20 @@
+# /etc/inet/ntp.conf, configuration for ntpd; see ntp.conf(4) for help
+
+driftfile /var/ntp/ntp.drift
+
+
+statsdir /var/ntp/ntpstats/
+
+filegen loopstats file loopstats type day enable
+filegen peerstats file peerstats type day enable
+filegen clockstats file clockstats type day enable
+
+
+
+# You do need to talk to an NTP server or two (or three).
+# server ntp.your-provider.example
+
+# Managed by puppet class { "ntp": servers => [ ... ] }
+<% [servers_real].flatten.each do |server| -%>
+server <%= server %>
+<% end -%>
