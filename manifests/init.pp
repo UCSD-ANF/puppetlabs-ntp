@@ -114,11 +114,11 @@ class ntp($servers="UNSET",
     }
   }
 
-  if ! ($svc_ensure in [ "running", "stopped" ]) {
-    fail("ensure parameter must be running or stopped")
-  }
-
   if ($supported == true) {
+
+    if ! ($svc_ensure in [ "running", "stopped" ]) {
+      fail("ensure parameter must be running or stopped")
+    }
 
     if $::operatingsystem == 'solaris' {
       package { $pkg_name:
