@@ -1,153 +1,33 @@
-# Class: ntp
-#
-#   This module manages the ntp service.
-#
-#   Jeff McCune <jeff@puppetlabs.com>
-#   2011-02-23
-#
-#   Tested platforms:
-#    - Debian 6.0 Squeeze
-#    - CentOS 5.4
-#    - Amazon Linux 2011.09
-#
-# Parameters:
-#
-#   $servers = [ "0.debian.pool.ntp.org iburst",
-#                "1.debian.pool.ntp.org iburst",
-#                "2.debian.pool.ntp.org iburst",
-#                "3.debian.pool.ntp.org iburst", ]
-#
-# Actions:
-#
-#  Installs, configures, and manages the ntp service.
-#
-# Requires:
-#
-# Sample Usage:
-#
-#   class { "ntp":
-#     servers    => [ 'time.apple.com' ],
-#     autoupdate => false,
-#   }
-#
-# [Remember: No empty lines between comments and class definition]
-class ntp($servers="UNSET",
-          $ensure="UNSET",
-          $autoupdate=false
-) {
+class ntp (
+  $autoupdate      = $ntp::params::autoupdate,
+  $config          = $ntp::params::config,
+  $config_template = $ntp::params::config_template,
+  $package_ensure  = $ntp::params::package_ensure,
+  $package_name    = $ntp::params::package_name,
+  $panic           = $ntp::params::panic,
+  $restrict        = $ntp::params::restrict,
+  $servers         = $ntp::params::servers,
+  $service_enable  = $ntp::params::service_enable,
+  $service_ensure  = $ntp::params::service_ensure,
+  $service_manage  = $ntp::params::service_manage,
+  $service_name    = $ntp::params::service_name,
+) inherits ntp::params {
 
-  if $autoupdate == true {
-    $package_ensure = $::operatingsystem ? {
-      'Solaris' => 'present', # autoupdate not possible on Solaris
-      default   => 'latest',
-    }
-  } elsif $autoupdate == false {
-    $package_ensure = present
-  } else {
-    fail("autoupdate parameter must be true or false")
+  if $autoupdate {
+    notice('autoupdate parameter has been deprecated and replaced with package_ensure.  Set this to latest for the same behavior as autoupdate => true.')
   }
 
-  case $::operatingsystem {
-    debian, ubuntu: {
-      $supported  = true
-      $pkg_name   = [ "ntp" ]
-      $svc_name   = "ntp"
-      $svc_ensure = $ensure ? {
-        'UNSET' => 'running',
-        default => $ensure,
-      }
-      $config     = "/etc/ntp.conf"
-      $config_tpl = "ntp.conf.debian.erb"
-      if ($servers == "UNSET") {
-        $servers_real = [ "0.debian.pool.ntp.org iburst",
-                          "1.debian.pool.ntp.org iburst",
-                          "2.debian.pool.ntp.org iburst",
-                          "3.debian.pool.ntp.org iburst", ]
-      } else {
-        $servers_real = $servers
-      }
-    }
-    centos, redhat, oel, linux: {
-      $supported  = true
-      $pkg_name   = [ "ntp" ]
-      $svc_name   = "ntpd"
-      $svc_ensure = $ensure ? {
-        'UNSET' => 'running',
-        default => $ensure,
-      }
-      $config     = "/etc/ntp.conf"
-      $config_tpl = "ntp.conf.el.erb"
-      if ($servers == "UNSET") {
-        $servers_real = [ "0.centos.pool.ntp.org",
-                          "1.centos.pool.ntp.org",
-                          "2.centos.pool.ntp.org", ]
-      } else {
-        $servers_real = $servers
-      }
-    }
-    solaris: {
-      $supported  = true
-      $pkg_name   = [ 'SUNWntpr', 'SUNWntpu' ]
-      $svc_name   = 'svc:/network/ntp:default'
-      $svc_ensure = $::virtual ? {
-        'zone'  => 'stopped', # Solaris zones cannot run ntp
-        default => $ensure ? {
-          'UNSET' => 'running',
-          default => $ensure,
-        },
-      }
-      $config     = '/etc/inet/ntp.conf'
-      $config_tpl = 'ntp.conf.solaris.erb'
-      if ($servers == 'UNSET') {
-        $servers_real = [ '0.pool.ntp.org iburst',
-                          '1.pool.ntp.org iburst',
-                          '2.pool.ntp.org iburst', ]
-      } else {
-        $servers_real = $servers
-      }
-    }
-    default: {
-      $supported = false
-      notify { "${module_name}_unsupported":
-        message => "The ${module_name} module is not supported on ${::operatingsystem}",
-      }
-    }
-  }
+  include '::ntp::install'
+  include '::ntp::config'
+  include '::ntp::service'
 
-  if ($supported == true) {
+  # Anchor this as per #8040 - this ensures that classes won't float off and
+  # mess everything up.  You can read about this at:
+  # http://docs.puppetlabs.com/puppet/2.7/reference/lang_containment.html#known-issues
+  anchor { 'ntp::begin': }
+  anchor { 'ntp::end': }
 
-    if ! ($svc_ensure in [ "running", "stopped" ]) {
-      fail("ensure parameter must be running or stopped")
-    }
-
-    if $::operatingsystem == 'solaris' {
-      package { $pkg_name:
-        ensure   => $package_ensure,
-        provider => 'sun', # force the system package provider, not pkgutil
-      }
-    } else {
-      package { $pkg_name:
-        ensure => $package_ensure,
-      }
-    }
-
-    file { $config:
-      ensure => file,
-      owner  => 0,
-      group  => 0,
-      mode   => 0644,
-      content => template("${module_name}/${config_tpl}"),
-      require => Package[$pkg_name],
-    }
-
-    service { "ntp":
-      ensure     => $svc_ensure,
-      name       => $svc_name,
-      hasstatus  => true,
-      hasrestart => true,
-      subscribe  => [ Package[$pkg_name], File[$config] ],
-    }
-
-  }
+  Anchor['ntp::begin'] -> Class['::ntp::install'] -> Class['::ntp::config']
+    ~> Class['::ntp::service'] -> Anchor['ntp::end']
 
 }
