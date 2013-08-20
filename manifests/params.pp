@@ -95,7 +95,7 @@ class ntp::params {
     'Solaris': {
       $config          = '/etc/inet/ntp.conf'
       $config_template = 'ntp/ntp.conf.solaris.erb'
-      $package_name    = undef  # Solaris ships with ntp.
+      $package_name    = false  # Solaris ships with ntp.
       $service_name    = 'ntp'
       $servers         = [
         '0.pool.ntp.org',

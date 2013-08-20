@@ -17,7 +17,7 @@ class ntp (
     notice('autoupdate parameter has been deprecated and replaced with package_ensure.  Set this to latest for the same behavior as autoupdate => true.')
   }
 
-  if $::ntp::params::package_name { include '::ntp::install' }
+  include '::ntp::install'
   include '::ntp::config'
   include '::ntp::service'
 

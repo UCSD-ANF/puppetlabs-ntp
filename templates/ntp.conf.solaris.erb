@@ -2,19 +2,35 @@
 
 driftfile /var/ntp/ntp.drift
 
-
 statsdir /var/ntp/ntpstats/
 
 filegen loopstats file loopstats type day enable
 filegen peerstats file peerstats type day enable
 filegen clockstats file clockstats type day enable
 
-
-
 # You do need to talk to an NTP server or two (or three).
 # server ntp.your-provider.example
-
-# Managed by puppet class { "ntp": servers => [ ... ] }
-<% [servers_real].flatten.each do |server| -%>
+# Managed by puppet class { 'ntp': servers => [ ... ] }
+<% [@servers].flatten.each do |server| -%>
 server <%= server %>
+<% end -%>
+
+<% if @panic == false -%>
+# Keep ntpd from panicking in the event of a large clock skew
+# when a VM guest is suspended and resumed.
+tinker panic 0
+
+<% end -%>
+<% if @restrict -%>
+# Permit time synchronization with our time source, but do not
+# permit the source to query or modify the service on this system.
+restrict default kod nomodify notrap nopeer noquery
+restrict -6 default kod nomodify notrap nopeer noquery
+
+# Permit all access over the loopback interface.  This could
+# be tightened as well, but to do so would effect some of
+# the administrative functions.
+restrict 127.0.0.1
+restrict -6 ::1
+
 <% end -%>
